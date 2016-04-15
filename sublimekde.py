@@ -1,4 +1,3 @@
-
 import os
 import sublime
 import sublime_plugin
@@ -6,22 +5,54 @@ import subprocess
 import threading
 
 
-class OpenWithKdeCommand(sublime_plugin.WindowCommand):
-    def run(self):
+class KdeFileDialog(sublime_plugin.WindowCommand):
+    def getWindowId(self):
+        winId = subprocess.check_output(['xdotool', 'getactivewindow'])
+        return winId.strip()
+
+    def getCwd(self):
         cwd = os.getcwd()
         view = self.window.active_view()
         if view:
             fn = view.file_name()
             if fn:
                 cwd = os.path.dirname(fn)
+        return cwd
 
-        process = subprocess.Popen(['kdialog', '--getopenfilename', cwd],
-                                   stdout=subprocess.PIPE)
+
+class OpenWithKdeCommand(KdeFileDialog):
+    def run(self):
+        process = subprocess.Popen(
+            ['kdialog',
+             '--attach',
+             KdeFileDialog.getWindowId(self),
+             '--multiple',
+             '--getopenfilename',
+             KdeFileDialog.getCwd(self)],
+            stdout=subprocess.PIPE
+        )
         t = DialogThread(process, self.on_open)
         t.start()
 
     def on_open(self, file_name):
-        self.window.open_file(file_name)
+        for i in file_name.split():
+            self.window.open_file(i)
+
+
+class SaveWithKdeCommand(KdeFileDialog):
+    def run(self):
+        process = subprocess.Popen(['kdialog',
+                                    '--attach',
+                                    KdeFileDialog.getWindowId(self),
+                                    '--getsavefilename',
+                                    KdeFileDialog.getCwd(self)],
+                                   stdout=subprocess.PIPE)
+        t = DialogThread(process, self.on_save)
+        t.start()
+
+    def on_save(self, file_name):
+        self.window.active_view().retarget(file_name)
+        self.window.run_command('save')
 
 
 class OpenKonsoleCommand(sublime_plugin.WindowCommand):
